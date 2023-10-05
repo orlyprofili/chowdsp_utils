@@ -149,6 +149,21 @@ void ModalFilterBank<maxNumModes, SampleType>::process (const BufferView<const S
 }
 
 template <size_t maxNumModes, typename SampleType>
+void ModalFilterBank<maxNumModes, SampleType>::processBypassed (int numSamples) noexcept
+{
+    renderBuffer.setCurrentSize (1, numSamples);
+    renderBuffer.clear();
+
+    auto* renderPtr = renderBuffer.getWritePointer (0);
+
+    for (size_t modeIdx = 0; modeIdx < numVecModesToProcess; ++modeIdx)
+    {
+        for (int n = 0; n < numSamples; ++n)
+            renderPtr[n] += xsimd::reduce_add (modes[modeIdx].processSample (0.0f));
+    }
+}
+
+template <size_t maxNumModes, typename SampleType>
 template <typename Modulator>
 void ModalFilterBank<maxNumModes, SampleType>::processWithModulation (const BufferView<const SampleType>& block, Modulator&& modulator) noexcept
 {

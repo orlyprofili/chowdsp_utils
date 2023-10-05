@@ -59,6 +59,9 @@ public:
     /** Process an audio buffer */
     void process (const BufferView<const SampleType>& buffer) noexcept;
 
+    /** Process an audio buffer */
+    void processBypassed (int numSamples) noexcept;
+
     /** Process with some user-defined modulator */
     template <typename Modulator>
     void processWithModulation (const BufferView<const SampleType>& block, Modulator&& modulator) noexcept;
