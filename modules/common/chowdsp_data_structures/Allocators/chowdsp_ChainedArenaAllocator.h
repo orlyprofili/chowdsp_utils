@@ -28,6 +28,11 @@ public:
     ChainedArenaAllocator (ChainedArenaAllocator&&) noexcept = default;
     ChainedArenaAllocator& operator= (ChainedArenaAllocator&&) noexcept = default;
 
+    ~ChainedArenaAllocator()
+    {
+        free_extra_data();
+    }
+
     /**
      * Selects the size used for each of the internal arena allocators,
      * and "resets" the allocator back to a single arena with that size.
@@ -37,6 +42,9 @@ public:
         arena_size_bytes = head_arena_size_bytes;
 
         arenas.clear();
+
+        free_extra_data();
+        extra_data.clear();
 
         arenas.emplace_front (arena_size_bytes);
         current_arena = arenas.begin();
@@ -51,6 +59,12 @@ public:
     {
         current_arena = arenas.begin();
         get_current_arena().clear();
+
+        for (auto& data : extra_data)
+        {
+            data.bytes_available += data.bytes_in_use;
+            data.bytes_in_use = 0;
+        }
     }
 
     /** Allocates a given number of bytes */
@@ -58,8 +72,23 @@ public:
     {
         if (num_bytes > arena_size_bytes)
         {
-            jassertfalse;
-            return nullptr;
+            for (auto& data : extra_data)
+            {
+                if (data.alignment == alignment && data.bytes_available >= num_bytes)
+                {
+                    auto* pointer = data.data + data.bytes_in_use;
+                    data.bytes_in_use += num_bytes;
+                    data.bytes_available -= num_bytes;
+                    return pointer;
+                }
+            }
+
+            auto& new_extra_data = extra_data.emplace_back();
+            new_extra_data.data = static_cast<std::byte*> (std::aligned_alloc (alignment, num_bytes));
+            new_extra_data.alignment = alignment;
+            new_extra_data.bytes_available = 0;
+            new_extra_data.bytes_in_use = num_bytes;
+            return new_extra_data.data;
         }
 
         auto pointer = get_current_arena().allocate_bytes (num_bytes, alignment);
@@ -103,6 +132,12 @@ public:
         return arena_count;
     }
 
+    /** Returns a list of the allocator's extra heap data */
+    [[nodiscard]] auto& get_extra_data() const noexcept
+    {
+        return extra_data;
+    }
+
     /**
      * Returns the total number of bytes currently being used
      * by this allocator.
@@ -115,9 +150,14 @@ public:
     [[nodiscard]] size_t get_total_bytes_used() const noexcept
     {
         size_t bytes_count = 0;
+
         for (auto arena_iter = arenas.begin(); arena_iter != current_arena; ++arena_iter)
             bytes_count += arena_iter->get_bytes_used();
         bytes_count += current_arena->get_bytes_used();
+
+        for (const auto& data : extra_data)
+            bytes_count += data.bytes_in_use;
+
         return bytes_count;
     }
 
@@ -164,9 +204,24 @@ private:
         get_current_arena().clear();
     }
 
+    void free_extra_data()
+    {
+        for (auto& data : extra_data)
+            std::free (data.data);
+    }
+
     std::forward_list<BaseArena> arenas {};
     typename std::forward_list<BaseArena>::iterator current_arena {};
     size_t arena_size_bytes = 0;
     size_t arena_count = 0;
+
+    struct ExtraData
+    {
+        std::byte* data = nullptr;
+        size_t alignment = 0;
+        size_t bytes_available = 0;
+        size_t bytes_in_use = 0;
+    };
+    std::list<ExtraData> extra_data {};
 };
 } // namespace chowdsp
