@@ -187,7 +187,7 @@ public:
     ~ScopedNoDenormals() noexcept;
 
 private:
-#if JUCE_USE_SSE_INTRINSICS || (JUCE_USE_ARM_NEON || defined(__arm64__) || defined(__aarch64__))
+#if JUCE_USE_SSE_INTRINSICS || JUCE_USE_ARM_NEON || defined(__arm64__) || defined(__aarch64__) || defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_FEATURE_DSP)
     intptr_t fpsr;
 #endif
 };
